@@ -243,8 +243,72 @@ void setupBLE() {
   Serial.println("Waiting a client connection to notify...");
 }
 
-void loop()
-{
+void loop() {
+    // Disconnecting
+    if (!deviceConnected && oldDeviceConnected) {
+        delay(500); // Give the Bluetooth stack the chance to get things ready
+        pServer->startAdvertising(); // Restart advertising
+        Serial.println("Start advertising");
+        oldDeviceConnected = deviceConnected;
+    }
+    
+    // Connecting
+    if (deviceConnected && !oldDeviceConnected) {
+        // Do stuff here on connecting
+        oldDeviceConnected = deviceConnected;
+    }
+
+    Serial.println("Getting GPS");
+    String message = modem.getGPSraw();
+    
+    // Split the message into substrings using the delimiter ","
+    int commaCount = 0;
+    int latIndex = 0;
+    int lonIndex = 0;
+    int speedIndex = 0;
+
+    // Iterate through the message characters
+    for (int i = 0; i < message.length(); i++) {
+        if (message.charAt(i) == ',') {
+            commaCount++;
+            if (commaCount == 3) {
+                latIndex = i + 1;
+            } else if (commaCount == 4) {
+                lonIndex = i + 1;
+            } else if (commaCount == 6) {
+                speedIndex = i + 1;
+                break; // We have found the speed index, so no need to continue
+            }
+        }
+    }
+
+    // Extract latitude, longitude, and speed from the message
+    String latitude = message.substring(latIndex, message.indexOf(',', latIndex));
+    String longitude = message.substring(lonIndex, message.indexOf(',', lonIndex));
+    String speed = message.substring(speedIndex, message.indexOf(',', speedIndex));
+
+    if (latitude != "" && longitude != "" && speed != "") {
+        Serial.print("Lat: ");
+        Serial.print(latitude);
+        Serial.print("\t");
+        Serial.print("Lon: ");
+        Serial.println(longitude);
+        Serial.print("Speed: ");
+        Serial.print(speed);
+        Serial.println();
+
+        // Convert latitude and longitude to string
+        String coordinates = latitude + "," + longitude + "," + speed;
+        // Send coordinates over BLE
+        pCharacteristic->setValue(coordinates.c_str());
+        pCharacteristic->notify();
+
+        // After successful positioning, the PMU charging indicator flashes quickly
+        PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_4HZ);
+    }
+
+    delay(100);
+    /*
     if (modem.getGPS(&lat2, &lon2, &speed2, &alt2, &vsat2, &usat2, &accuracy2,
                      &year2, &month2, &day2, &hour2, &min2, &sec2)) {
         Serial.println();
@@ -268,11 +332,10 @@ void loop()
 
         // After successful positioning, the PMU charging indicator flashes quickly
         PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_4HZ);
-        delay(1000);
     } else {
         // Blinking PMU charging indicator
         PMU.setChargingLedMode(level ? XPOWERS_CHG_LED_ON : XPOWERS_CHG_LED_OFF);
         level ^= 1;
-        delay(1000);
     }
+    */
 }
